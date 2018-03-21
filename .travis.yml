@@ -4,4 +4,6 @@ python:
 install:
   - pip install -r requirements.txt
   - pip install pytest-asyncio
-script: pytest
+script:
+  - flake8
+  - pytest

@@ -5,6 +5,7 @@ from typing import Dict, Callable
 
 import aiohttp
 from aiohttp import web
+from aiohttp import ClientError
 
 Call = namedtuple('Call', 'name, args, kwargs')
 Result = namedtuple('Result', 'ok, value')
@@ -14,8 +15,11 @@ class NoSuchRpcError(Exception):
     pass
 
 
+class NetworkError(Exception):
+    pass
+
 class Server:
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(self, host: str = '127.0.0.1', port: int = 7890) -> None:
         self.host = host
         self.port = port
         self.funcs: Dict[str, Callable] = {}
@@ -63,7 +67,8 @@ class Client:
             self.session = aiohttp.ClientSession()
         data = pickle.dumps(Call(name, args, kwargs))
         async with self.session.post(self.url, data=data) as resp:
-            resp.raise_for_status()
+            if resp.status >= 400:
+                raise NetworkError
             res = pickle.loads(await resp.read())
             if res.ok:
                 return res.value
