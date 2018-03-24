@@ -1,6 +1,6 @@
 import pytest
 
-import rpc
+from . import rpc
 
 port = 7890
 

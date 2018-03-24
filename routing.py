@@ -1,12 +1,12 @@
 from typing import List
 
 from . import rpc
-
-from .node import NodeID, Node
+from .config import ksize
+from .node import ID, Node
 
 
 class KBucket:
-    def __init__(self, range: range, size: int = 20):
+    def __init__(self, range: range, size: int = 20) -> None:
         self.range = range
         self.size = size
         self.nodes: List[Node] = []
@@ -20,7 +20,7 @@ class KBucket:
     def __contains__(self, node: Node):
         return node in self.nodes
 
-    def covers(self, id: NodeID) -> bool:
+    def covers(self, id: ID) -> bool:
         return id in self.range
 
     def full(self) -> bool:
@@ -60,7 +60,7 @@ class KBucket:
 
 
 class RoutingTable:
-    def __init__(self, server_id: NodeID):
+    def __init__(self, server_id: ID) -> None:
         self.buckets: List[KBucket] = [KBucket(range(0, 2**160))]
         self.server_id = server_id
 
@@ -86,11 +86,11 @@ class RoutingTable:
                 self.buckets += bucket.split()
                 self.update(new)
 
-    def get_nodes_nearby(self, node: Node, num: int):
+    def get_nodes_nearby(self, node: Node):
         def gen():
             for bucket in self:
                 for node in bucket:
                     yield node
         nodes: List[Node] = list(gen())
         nodes.sort(key=lambda n: n.id ^ node.id)
-        return nodes[:num]
+        return nodes[:ksize]

@@ -5,7 +5,6 @@ from typing import Dict, Callable
 
 import aiohttp
 from aiohttp import web
-from aiohttp import ClientError
 
 Call = namedtuple('Call', 'name, args, kwargs')
 Result = namedtuple('Result', 'ok, value')
@@ -17,6 +16,7 @@ class NoSuchRpcError(Exception):
 
 class NetworkError(Exception):
     pass
+
 
 class Server:
     def __init__(self, host: str = '127.0.0.1', port: int = 7890) -> None:
@@ -76,6 +76,9 @@ class Client:
                 raise res.value
 
     def __getattr__(self, name):
+        # pickle.dumps(self) calls self.__getstate__
+        if name.startswith('_'):
+            raise AttributeError
         return partial(self.call, name)
 
     async def close(self) -> None:

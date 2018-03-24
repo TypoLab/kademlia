@@ -4,9 +4,9 @@ import random
 from . import rpc
 
 
-class NodeID:
+class ID:
     '''Node ID with readable representation.'''
-    def __init__(self, id: int = None):
+    def __init__(self, id: int = None) -> None:
         if id is None:
             id = random.getrandbits(160)
         self.id = id
@@ -25,7 +25,7 @@ class NodeID:
 
 
 class Node:
-    def __init__(self, id: NodeID, host: str, port: int) -> None:
+    def __init__(self, id: ID, host: str, port: int) -> None:
         self.id = id
         self.host = host
         self.port = port
