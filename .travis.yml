@@ -3,10 +3,10 @@ python:
   - "3.6"
 before_install:
   - sudo apt-get -qq update
-  - sudo apt-get install python-flake8
+  - sudo apt-get install python3-flake8
 install:
   - pip install -r requirements.txt
   - pip install pytest-asyncio
 script:
-  - flake8 TypoLab/kademlia
+  - flake8
   - pytest
