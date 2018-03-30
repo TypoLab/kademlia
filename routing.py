@@ -1,8 +1,8 @@
 from typing import List
 
 from . import rpc
-from .config import ksize
-from .node import ID, Node
+from .config import ksize, this_node
+from .node import Node
 
 
 class KBucket:
@@ -20,8 +20,8 @@ class KBucket:
     def __contains__(self, node: Node):
         return node in self.nodes
 
-    def covers(self, id: ID) -> bool:
-        return id in self.range
+    def covers(self, node: Node) -> bool:
+        return node.id in self.range
 
     def full(self) -> bool:
         return len(self.nodes) == self.size
@@ -60,9 +60,8 @@ class KBucket:
 
 
 class RoutingTable:
-    def __init__(self, server_id: ID) -> None:
+    def __init__(self) -> None:
         self.buckets: List[KBucket] = [KBucket(range(0, 2**160))]
-        self.server_id = server_id
 
     def __repr__(self):
         return f'<RoutingTable: {len(self.buckets)} KBucket>'
@@ -81,12 +80,12 @@ class RoutingTable:
         if not bucket.full():
             bucket.update(new)
         else:
-            if bucket.covers(self.server_id):
+            if bucket.covers(this_node):
                 self.buckets.remove(bucket)
                 self.buckets += bucket.split()
                 self.update(new)
 
-    def get_nodes_nearby(self, node: Node):
+    def get_nodes_nearby(self, node: Node) -> List[Node]:
         def gen():
             for bucket in self:
                 for node in bucket:

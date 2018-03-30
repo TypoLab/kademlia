@@ -29,7 +29,11 @@ class Node:
         self.id = id
         self.host = host
         self.port = port
-        self.rpc = rpc.Client(host, port)
 
     def __repr__(self):
         return f'<Node {self.id} {self.host}:{self.port}>'
+
+    @property
+    def rpc(self):
+        self.rpc = rpc.Server()
+        return self.rpc

@@ -1,12 +1,14 @@
 import pickle
 from collections import namedtuple
 from functools import partial
-from typing import Dict, Callable
+from typing import Callable, Dict
 
 import aiohttp
 from aiohttp import web
 
-Call = namedtuple('Call', 'name, args, kwargs')
+from .config import this_node
+
+Call = namedtuple('Call', 'name, args, kwargs, node')
 Result = namedtuple('Result', 'ok, value')
 
 
@@ -19,10 +21,12 @@ class NetworkError(Exception):
 
 
 class Server:
-    def __init__(self, host: str = '127.0.0.1', port: int = 7890) -> None:
+    def __init__(self, host: str = this_node.host,
+                 port: int = this_node.port) -> None:
         self.host = host
         self.port = port
         self.funcs: Dict[str, Callable] = {}
+        self.on_rpc: Callable = None
         app = web.Application()
         self.runner = web.AppRunner(app)
         app.router.add_post('/rpc', self.handler)
@@ -33,6 +37,8 @@ class Server:
 
     async def handler(self, request: web.Request) -> web.Response:
         call = pickle.loads(await request.read())
+        if self.on_rpc:
+            self.on_rpc(call.node)
         res = self.do_call(call)
         return web.Response(body=pickle.dumps(res))
 
@@ -65,7 +71,7 @@ class Client:
     async def call(self, name: str, *args, **kwargs):
         if self.session is None:
             self.session = aiohttp.ClientSession()
-        data = pickle.dumps(Call(name, args, kwargs))
+        data = pickle.dumps(Call(name, args, kwargs, this_node))
         async with self.session.post(self.url, data=data) as resp:
             if resp.status >= 400:
                 raise NetworkError

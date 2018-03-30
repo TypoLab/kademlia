@@ -3,7 +3,7 @@ python:
   - "3.6"
 install:
   - pip install -r requirements.txt
-  - pip install flake8 pytest-asyncio
+  - pip install mypy pytest-asyncio
 script:
-  - flake8 .
+  - mypy --ignore-missing-imports ../kademlia
   - pytest
