@@ -1,7 +1,7 @@
 import pickle
 from collections import namedtuple
 from functools import partial
-from typing import Callable, Dict
+from typing import Callable, Dict, Any
 
 import aiohttp
 from aiohttp import web
@@ -9,7 +9,7 @@ from aiohttp import web
 Call = namedtuple('Call', 'name, args, kwargs, node')
 Result = namedtuple('Result', 'ok, value')
 # set in .protocol.Server.__init__
-this_node = None
+this_node: Any = None
 
 
 class NoSuchRpcError(Exception):

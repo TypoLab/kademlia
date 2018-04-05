@@ -1,9 +1,7 @@
 import base64
-import hashlib
+from typing import Any
 
 from . import rpc
-
-HASH = hashlib._hashlib.HASH
 
 
 class ID:
@@ -11,7 +9,7 @@ class ID:
     # TODO: doctest
 
     def __init__(self, num: int = None, *,
-                 hash: HASH = None, base32: str = None) -> None:
+                 hash: Any = None, base32: str = None) -> None:
         if sum(1 for arg in (num, hash, base32) if arg) != 1:
             raise ValueError('Expected excactly one arguement.')
         if num:

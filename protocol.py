@@ -28,7 +28,7 @@ class Server:
         self.this_node = Node(id, host, port)
         self.routing_table = RoutingTable(self.this_node)
         rpc.this_node = self.this_node
-        self.storage = {}
+        self.storage: dict = {}
 
     async def start(self, known_nodes: List[Node] = None):
         # setup the RPC
