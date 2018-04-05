@@ -6,10 +6,10 @@ from typing import Callable, Dict
 import aiohttp
 from aiohttp import web
 
-from .config import this_node
-
 Call = namedtuple('Call', 'name, args, kwargs, node')
 Result = namedtuple('Result', 'ok, value')
+# set in .protocol.Server.__init__
+this_node = None
 
 
 class NoSuchRpcError(Exception):
@@ -21,8 +21,7 @@ class NetworkError(Exception):
 
 
 class Server:
-    def __init__(self, host: str = this_node.host,
-                 port: int = this_node.port) -> None:
+    def __init__(self, host: str, port: int) -> None:
         self.host = host
         self.port = port
         self.funcs: Dict[str, Callable] = {}

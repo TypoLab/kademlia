@@ -1,8 +1,9 @@
 import asyncio
+import random
 from typing import List, Union
 
 from . import rpc
-from .config import asize, ksize, this_node
+from .config import asize, ksize
 from .node import ID, Node
 from .routing import RoutingTable
 
@@ -12,20 +13,33 @@ class ValueFound(Exception):
 
 
 class Server:
-    def __init__(self):
-        self.routing_table = RoutingTable()
+    instance = None
+
+    def __new__(cls, host: str, port: int):
+        if cls.instance is None:
+            cls.instance = super().__new__(cls)
+            return cls.instance
+        else:
+            raise RuntimeError(
+                f'There is alreadly a Kademlia server object: {cls.instance}')
+
+    def __init__(self, host: str, port: int) -> None:
+        id = ID(random.getrandbits(160))
+        self.this_node = Node(id, host, port)
+        self.routing_table = RoutingTable(self.this_node)
+        rpc.this_node = self.this_node
         self.storage = {}
 
     async def start(self, known_nodes: List[Node] = None):
         # setup the RPC
-        s = rpc.Server()
+        s = rpc.Server(self.this_node.host, self.this_node.port)
 
         @s.register
         def ping() -> str:
             return 'pong'
 
         @s.register
-        def store(key, value) -> None:
+        def store(key: ID, value: bytes) -> None:
             self.storage[key] = value
 
         @s.register
@@ -48,9 +62,9 @@ class Server:
         # join the network
         if known_nodes is None:
             return
-        tasks = (node.rpc.find_node(this_node) for node in known_nodes)
+        tasks = (node.rpc.find_node(self.this_node) for node in known_nodes)
         res = await asyncio.gather(*tasks, return_exceptions=True)
-        for idx, new_nodes in res:
+        for idx, new_nodes in enumerate(res):
             if isinstance(new_nodes, rpc.NetworkError):
                 print(f'{known_nodes[idx]} failed to connect.')
             else:
@@ -86,8 +100,9 @@ class Server:
             nodes.sort(key=lambda n: n.id ^ id)
             return nodes[:ksize]
 
-    async def set(self, key: bytes, value: bytes) -> None:
-        nodes = self.routing_table.get_nodes_nearby(id)
+    async def set(self, key: ID, value: bytes) -> None:
+        #  nodes = self.routing_table.get_nodes_nearby(id)
+        nodes = await self.lookup_node(key)
         await asyncio.gather(*(node.rpc.store(key, value) for node in nodes))
 
     async def get(self, key: ID) -> bytes:
@@ -104,7 +119,7 @@ class Server:
                 nodes = res
         return b'not found'
 
-    async def lookup_node(self, id: ID) -> Node:
+    async def lookup_node(self, id: ID) -> List[Node]:
         nodes = self.routing_table.get_nodes_nearby(id)
         sem = asyncio.Semaphore(asize)
         while True:
