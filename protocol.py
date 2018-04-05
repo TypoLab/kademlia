@@ -53,8 +53,8 @@ class Server:
             except KeyError:
                 return find_node(id)
 
-        def update(node: Node):
-            self.routing_table.update(node)
+        async def update(node: Node):
+            await self.routing_table.update(node)
         s.on_rpc = update
 
         await s.start()
@@ -62,15 +62,15 @@ class Server:
         # join the network
         if known_nodes is None:
             return
-        tasks = (node.rpc.find_node(self.this_node) for node in known_nodes)
+        tasks = (node.rpc.find_node(self.this_node.id) for node in known_nodes)
         res = await asyncio.gather(*tasks, return_exceptions=True)
         for idx, new_nodes in enumerate(res):
             if isinstance(new_nodes, rpc.NetworkError):
                 print(f'{known_nodes[idx]} failed to connect.')
             else:
-                self.routing_table.update(known_nodes[idx])
+                await self.routing_table.update(known_nodes[idx])
                 for node in new_nodes:
-                    self.routing_table.update(node)
+                    await self.routing_table.update(node)
 
     async def _query(self, nodes: List[Node], id: ID,
                      rpc_func: str, sem: asyncio.Semaphore) -> List[Node]:

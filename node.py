@@ -1,16 +1,18 @@
 import base64
+from functools import total_ordering
 from typing import Any
 
 from . import rpc
 
 
+@total_ordering
 class ID:
     '''Node ID with readable representation.'''
     # TODO: doctest
 
     def __init__(self, num: int = None, *,
                  hash: Any = None, base32: str = None) -> None:
-        if sum(1 for arg in (num, hash, base32) if arg) != 1:
+        if sum(1 for arg in (num, hash, base32) if arg is not None) != 1:
             raise ValueError('Expected excactly one arguement.')
         if num:
             self.num = num

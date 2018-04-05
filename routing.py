@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 
 from . import rpc
 from .config import ksize
@@ -6,7 +6,7 @@ from .node import Node, ID
 
 
 class KBucket:
-    def __init__(self, range: range, size: int = 20) -> None:
+    def __init__(self, range: Tuple[int, int], size: int = ksize) -> None:
         self.range = range
         self.size = size
         self.nodes: List[Node] = []
@@ -21,7 +21,7 @@ class KBucket:
         return node in self.nodes
 
     def covers(self, node: Node) -> bool:
-        return node.id in self.range
+        return self.range[0] <= node.id < self.range[1]
 
     def full(self) -> bool:
         return len(self.nodes) == self.size
@@ -62,7 +62,7 @@ class KBucket:
 class RoutingTable:
     def __init__(self, this_node: Node) -> None:
         self.this_node = this_node
-        self.buckets: List[KBucket] = [KBucket(range(0, 2**160))]
+        self.buckets: List[KBucket] = [KBucket((0, 2**160))]
 
     def __repr__(self):
         return f'<RoutingTable: {len(self.buckets)} KBucket>'
@@ -70,16 +70,16 @@ class RoutingTable:
     def __iter__(self):
         return iter(self.buckets)
 
-    def update(self, new: Node):
+    async def update(self, new: Node):
         def bucket_covers():
             for bucket in self.buckets:
                 if bucket.covers(new):
                     return bucket
             else:
-                raise RuntimeError('bug')
+                raise RuntimeError(f'{new} not in any of bucket!')
         bucket = bucket_covers()
         if not bucket.full():
-            bucket.update(new)
+            await bucket.update(new)
         else:
             if bucket.covers(self.this_node):
                 self.buckets.remove(bucket)

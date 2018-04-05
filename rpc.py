@@ -37,7 +37,7 @@ class Server:
     async def handler(self, request: web.Request) -> web.Response:
         call = pickle.loads(await request.read())
         if self.on_rpc:
-            self.on_rpc(call.node)
+            await self.on_rpc(call.node)
         res = self.do_call(call)
         return web.Response(body=pickle.dumps(res))
 
