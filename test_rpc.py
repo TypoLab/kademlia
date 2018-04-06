@@ -17,7 +17,8 @@ async def server():
 async def client():
     c = rpc.Client('127.0.0.1', port)
     yield c
-    await c.close()
+    await rpc.close()
+    rpc.session = None
 
 
 @pytest.mark.asyncio
