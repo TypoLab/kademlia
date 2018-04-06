@@ -1,18 +1,19 @@
+import reprlib
 from typing import List, Tuple
 
 from . import rpc
 from .config import ksize
-from .node import Node, ID
+from .node import ID, Node
 
 
 class KBucket:
-    def __init__(self, range: Tuple[int, int], size: int = ksize) -> None:
+    def __init__(self, range: Tuple[int, int]) -> None:
         self.range = range
-        self.size = size
         self.nodes: List[Node] = []
 
     def __repr__(self):
-        return f'<KBucket: {len(self.nodes)} node in {self.range}>'
+        #  return f'<KBucket: {len(self.nodes)} node in {self.range}>'
+        return f'<KBucket: {reprlib.repr(self.nodes)}'
 
     def __iter__(self):
         return iter(self.nodes)
@@ -24,7 +25,7 @@ class KBucket:
         return self.range[0] <= node.id < self.range[1]
 
     def full(self) -> bool:
-        return len(self.nodes) == self.size
+        return len(self.nodes) == ksize
 
     async def update(self, new):
         def move_to_tail(node):
@@ -34,7 +35,7 @@ class KBucket:
         if new in self.nodes:
             move_to_tail(new)
         else:
-            if len(self.nodes) < self.size:
+            if len(self.nodes) < ksize:
                 self.nodes.append(new)
             else:
                 oldest = self.nodes[0]
@@ -48,9 +49,9 @@ class KBucket:
 
     def split(self):
         r = self.range
-        mid = (r.start + r.stop) // 2
-        left = KBucket(range(r.start, mid), self.size)
-        right = KBucket(range(mid, r.stop), self.size)
+        mid = (r[0] + r[1]) // 2
+        left = KBucket((r[0], mid))
+        right = KBucket((mid, r[1]))
         for node in self:
             if node.id < mid:
                 left.nodes.append(node)
@@ -71,11 +72,15 @@ class RoutingTable:
         return iter(self.buckets)
 
     async def update(self, new: Node):
+        if new == self.this_node:
+            print('ignoring self')
+            return
         def bucket_covers():
             for bucket in self.buckets:
                 if bucket.covers(new):
                     return bucket
             else:
+                print(f'** {self.buckets}')
                 raise RuntimeError(f'{new} not in any of bucket!')
         bucket = bucket_covers()
         if not bucket.full():
@@ -84,7 +89,7 @@ class RoutingTable:
             if bucket.covers(self.this_node):
                 self.buckets.remove(bucket)
                 self.buckets += bucket.split()
-                self.update(new)
+                await self.update(new)
 
     def get_nodes_nearby(self, id: ID) -> List[Node]:
         def gen():

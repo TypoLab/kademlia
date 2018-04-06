@@ -39,6 +39,7 @@ class Server:
         if self.on_rpc:
             await self.on_rpc(call.node)
         res = self.do_call(call)
+        print(f'[RPC] {call.name}({call.args}) -> {res}')
         return web.Response(body=pickle.dumps(res))
 
     def do_call(self, call: Call) -> Result:

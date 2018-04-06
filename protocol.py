@@ -15,7 +15,7 @@ class ValueFound(Exception):
 class Server:
     instance = None
 
-    def __new__(cls, host: str, port: int):
+    def __new__(cls, host: str, port: int, id: ID = None):
         if cls.instance is None:
             cls.instance = super().__new__(cls)
             return cls.instance
@@ -23,8 +23,9 @@ class Server:
             raise RuntimeError(
                 f'There is alreadly a Kademlia server object: {cls.instance}')
 
-    def __init__(self, host: str, port: int) -> None:
-        id = ID(random.getrandbits(160))
+    def __init__(self, host: str, port: int, id: ID = None) -> None:
+        if id is None:
+            id = ID(random.getrandbits(160))
         self.this_node = Node(id, host, port)
         self.routing_table = RoutingTable(self.this_node)
         rpc.this_node = self.this_node
@@ -81,7 +82,7 @@ class Server:
             nonlocal nodes
             try:
                 with (await sem):
-                    res = await getattr(node, rpc_func)(id)
+                    res = await getattr(node.rpc, rpc_func)(id)
             except rpc.NetworkError:
                 nodes.remove(node)
             else:
@@ -97,12 +98,19 @@ class Server:
                 f.cancel()
             raise
         else:
+            nodes = list(set(nodes))
+            try:
+                nodes.remove(self.this_node)
+            except ValueError:
+                pass
             nodes.sort(key=lambda n: n.id ^ id)
             return nodes[:ksize]
 
     async def set(self, key: ID, value: bytes) -> None:
-        #  nodes = self.routing_table.get_nodes_nearby(id)
+        #  nodes = self.routing_table.get_nodes_nearby(key)
         nodes = await self.lookup_node(key)
+        print('here')
+        import ipdb; ipdb.set_trace()
         await asyncio.gather(*(node.rpc.store(key, value) for node in nodes))
 
     async def get(self, key: ID) -> bytes:
@@ -124,6 +132,8 @@ class Server:
         sem = asyncio.Semaphore(asize)
         while True:
             res = await self._query(nodes.copy(), id, 'find_node', sem)
+            print(f'the res={res}')
+            input()
             if res == nodes:
                 break
             nodes = res
