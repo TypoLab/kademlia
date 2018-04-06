@@ -1,4 +1,3 @@
-import reprlib
 from typing import List, Tuple
 
 from . import rpc
@@ -12,8 +11,7 @@ class KBucket:
         self.nodes: List[Node] = []
 
     def __repr__(self):
-        #  return f'<KBucket: {len(self.nodes)} node in {self.range}>'
-        return f'<KBucket: {reprlib.repr(self.nodes)}'
+        return f'<KBucket: {len(self.nodes)} node in {self.range}>'
 
     def __iter__(self):
         return iter(self.nodes)
@@ -75,6 +73,7 @@ class RoutingTable:
         if new == self.this_node:
             print('ignoring self')
             return
+
         def bucket_covers():
             for bucket in self.buckets:
                 if bucket.covers(new):

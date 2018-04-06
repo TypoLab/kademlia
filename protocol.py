@@ -31,9 +31,12 @@ class Server:
         rpc.this_node = self.this_node
         self.storage: dict = {}
 
+    def __repr__(self):
+        return f'<Kademlia ID={self.this_node.id}>'
+
     async def start(self, known_nodes: List[Node] = None):
         # setup the RPC
-        s = rpc.Server(self.this_node.host, self.this_node.port)
+        self.rpc = s = rpc.Server(self.this_node.host, self.this_node.port)
 
         @s.register
         def ping() -> str:
@@ -55,6 +58,7 @@ class Server:
                 return find_node(id)
 
         async def update(node: Node):
+            print(f'New: {node}')
             await self.routing_table.update(node)
         s.on_rpc = update
 
@@ -109,8 +113,6 @@ class Server:
     async def set(self, key: ID, value: bytes) -> None:
         #  nodes = self.routing_table.get_nodes_nearby(key)
         nodes = await self.lookup_node(key)
-        print('here')
-        import ipdb; ipdb.set_trace()
         await asyncio.gather(*(node.rpc.store(key, value) for node in nodes))
 
     async def get(self, key: ID) -> bytes:
@@ -132,9 +134,11 @@ class Server:
         sem = asyncio.Semaphore(asize)
         while True:
             res = await self._query(nodes.copy(), id, 'find_node', sem)
-            print(f'the res={res}')
-            input()
             if res == nodes:
                 break
             nodes = res
         return nodes
+
+    async def close(self):
+        await self.rpc.close()
+        await rpc.close()
