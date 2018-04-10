@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import random
 from typing import List, Union
 
@@ -6,6 +7,8 @@ from . import rpc
 from .config import asize, ksize
 from .node import ID, Node
 from .routing import RoutingTable
+
+log = logging.getLogger(__name__)
 
 
 class ValueFound(Exception):
@@ -58,7 +61,6 @@ class Server:
                 return find_node(id)
 
         async def update(node: Node):
-            print(f'New: {node}')
             await self.routing_table.update(node)
         s.on_rpc = update
 
@@ -71,7 +73,7 @@ class Server:
         res = await asyncio.gather(*tasks, return_exceptions=True)
         for idx, new_nodes in enumerate(res):
             if isinstance(new_nodes, rpc.NetworkError):
-                print(f'{known_nodes[idx]} failed to connect.')
+                log.error(f'{known_nodes[idx]} failed to connect.')
             else:
                 await self.routing_table.update(known_nodes[idx])
                 for node in new_nodes:
