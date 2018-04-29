@@ -2,12 +2,18 @@ import logging
 import pickle
 from collections import namedtuple
 from functools import partial
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, NamedTuple
 
 import aiohttp
 from aiohttp import web
 
-Call = namedtuple('Call', 'name, args, kwargs, node')
+#  Call = namedtuple('Call', 'name, args, kwargs, node')
+class Call(NamedTuple):
+    name: str
+    args: tuple
+    kwargs: dict
+    node: Any
+
 Result = namedtuple('Result', 'ok, value')
 # set in .protocol.Server.__init__
 this_node: Any = None
