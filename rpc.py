@@ -1,96 +1,88 @@
+from __future__ import annotations
+import asyncio
 import logging
 import pickle
-from collections import namedtuple
+import typing
+from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Dict, NamedTuple
 
-import aiohttp
-from aiohttp import web
+if typing.TYPE_CHECKING:
+    from asyncio import Future, Handle
+    from asyncio.transports import DatagramTransport
+    from typing import Any, Callable, Dict, Union, Text, Tuple
 
-#  Call = namedtuple('Call', 'name, args, kwargs, node')
-class Call(NamedTuple):
+
+@dataclass
+class Call:
     name: str
     args: tuple
     kwargs: dict
-    node: Any
+    id: int
 
-Result = namedtuple('Result', 'ok, value')
-# set in .protocol.Server.__init__
-this_node: Any = None
+
+@dataclass
+class Result:
+    ok: bool
+    value: Any
+    id: int
+
+
 log = logging.getLogger(__name__)
-session: aiohttp.ClientSession = None
 
 
-class NoSuchRpcError(Exception):
-    pass
-
-
-class NetworkError(Exception):
-    pass
-
-
-class Server:
-    def __init__(self, host: str, port: int) -> None:
-        self.host = host
-        self.port = port
+class RpcServerProtocol(asyncio.DatagramProtocol):
+    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        self.loop = loop
         self.funcs: Dict[str, Callable] = {}
-        self.on_rpc: Callable = None
-        app = web.Application()
-        self.runner = web.AppRunner(app)
-        app.router.add_post('/rpc', self.handler)
 
     def register(self, func: Callable) -> Callable:
         self.funcs[func.__name__] = func
         return func
 
-    async def handler(self, request: web.Request) -> web.Response:
-        call = pickle.loads(await request.read())
-        if self.on_rpc:
-            await self.on_rpc(call.node)
-        res = self.do_call(call)
-        log.debug(f'{call.name}{call.args} -> {res}')
-        return web.Response(body=pickle.dumps(res))
-
     def do_call(self, call: Call) -> Result:
         try:
             func = self.funcs[call.name]
         except KeyError:
-            return Result(False, NoSuchRpcError)
+            return Result(False, ValueError(f'no such RPC: {call.name}'), call.id)
         try:
             res = func(*call.args, **call.kwargs)
         except Exception as exc:
-            return Result(False, exc)
+            return Result(False, exc, call.id)
         else:
-            return Result(True, res)
+            return Result(True, res, call.id)
 
-    async def start(self) -> None:
-        await self.runner.setup()
-        site = web.TCPSite(self.runner, self.host, self.port)
-        await site.start()
+    def connection_made(self, transport: DatagramTransport) -> None:
+        self.transport = transport
 
-    async def close(self) -> None:
-        await self.runner.cleanup()
-
-
-class Client:
-    def __init__(self, host: str, port: int) -> None:
-        self.url = f'http://{host}:{port}/rpc'
-
-    async def call(self, name: str, *args, **kwargs):
-        global session
-        if session is None:
-            session = aiohttp.ClientSession(raise_for_status=True)
-        data = pickle.dumps(Call(name, args, kwargs, this_node))
+    def datagram_received(self, data: Union[bytes, Text], addr: Tuple[str, int]) -> None:
         try:
-            async with session.post(self.url, data=data) as resp:
-                res = pickle.loads(await resp.read())
-        except aiohttp.ClientError as exc:
-            raise NetworkError from exc
+            call: Call = pickle.loads(data)
+        except pickle.UnpicklingError:
+            log.warning(f'received invalid RPC request: {data}')
         else:
-            if res.ok:
-                return res.value
-            else:
-                raise res.value
+            res = self.do_call(call)
+            self.transport.sendto(pickle.dumps(res), addr)
+
+
+class RpcClientProtocol(asyncio.DatagramProtocol):
+    def __init__(self, loop: asyncio.AbstractEventLoop, timeout: int = 30) -> None:
+        self.loop = loop
+        self.timeout = timeout
+        self.requests: Dict[int, Tuple[Future, Handle]] = {}
+        self.req_id = 0
+
+    def call(self, name: str, *args, **kwargs) -> Future:
+        call = Call(name, args, kwargs, self.req_id)
+        self.req_id += 1
+        on_finished = self.loop.create_future()
+        on_timeout = self.loop.call_later(self.timeout, self.timed_out, call.id)
+        self.requests[call.id] = on_finished, on_timeout
+        self.transport.sendto(pickle.dumps(call))
+        return on_finished
+
+    def timed_out(self, call_id: int) -> None:
+        on_finished, _ = self.requests.pop(call_id)
+        on_finished.set_exception(asyncio.TimeoutError)
 
     def __getattr__(self, name):
         # pickle.dumps(self) calls self.__getstate__
@@ -98,7 +90,18 @@ class Client:
             raise AttributeError
         return partial(self.call, name)
 
+    def connection_made(self, transport: DatagramTransport) -> None:
+        self.transport = transport
 
-async def close():
-    if session is not None:
-        await session.close()
+    def datagram_received(self, data: Union[bytes, Text], addr: Tuple[str, int]) -> None:
+        try:
+            res: Result = pickle.loads(data)
+        except pickle.UnpicklingError:
+            log.warning(f'received invalid RPC response: {data}')
+        else:
+            on_call_finished, on_timeout = self.requests.pop(res.id)
+            on_timeout.cancel()
+            if res.ok:
+                on_call_finished.set_result(res.value)
+            else:
+                on_call_finished.set_exception(res.value)
