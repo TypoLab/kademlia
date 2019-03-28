@@ -1,15 +1,14 @@
 from __future__ import annotations
+
 import asyncio
 import logging
 import pickle
-import typing
+from asyncio import Future, Handle
+from asyncio.transports import BaseTransport, DatagramTransport
 from dataclasses import dataclass
 from functools import partial
-
-if typing.TYPE_CHECKING:
-    from asyncio import Future, Handle
-    from asyncio.transports import DatagramTransport
-    from typing import Any, Callable, Dict, Union, Text, Tuple
+from typing import Any, Callable, Dict, Union, Text, Tuple
+from typing import cast
 
 
 @dataclass
@@ -43,7 +42,8 @@ class RpcServerProtocol(asyncio.DatagramProtocol):
         try:
             func = self.funcs[call.name]
         except KeyError:
-            return Result(False, ValueError(f'no such RPC: {call.name}'), call.id)
+            return Result(
+                False, ValueError(f'no such RPC: {call.name}'), call.id)
         try:
             res = func(*call.args, **call.kwargs)
         except Exception as exc:
@@ -51,10 +51,12 @@ class RpcServerProtocol(asyncio.DatagramProtocol):
         else:
             return Result(True, res, call.id)
 
-    def connection_made(self, transport: DatagramTransport) -> None:
-        self.transport = transport
+    def connection_made(self, transport: BaseTransport) -> None:
+        self.transport = cast(DatagramTransport, transport)
 
-    def datagram_received(self, data: Union[bytes, Text], addr: Tuple[str, int]) -> None:
+    def datagram_received(self, data: Union[bytes, Text],
+                          addr: Tuple[str, int]) -> None:
+        assert isinstance(data, bytes)
         try:
             call: Call = pickle.loads(data)
         except pickle.UnpicklingError:
@@ -65,7 +67,8 @@ class RpcServerProtocol(asyncio.DatagramProtocol):
 
 
 class RpcClientProtocol(asyncio.DatagramProtocol):
-    def __init__(self, loop: asyncio.AbstractEventLoop, timeout: int = 30) -> None:
+    def __init__(self, loop: asyncio.AbstractEventLoop,
+                 timeout: int = 30) -> None:
         self.loop = loop
         self.timeout = timeout
         self.requests: Dict[int, Tuple[Future, Handle]] = {}
@@ -75,7 +78,8 @@ class RpcClientProtocol(asyncio.DatagramProtocol):
         call = Call(name, args, kwargs, self.req_id)
         self.req_id += 1
         on_finished = self.loop.create_future()
-        on_timeout = self.loop.call_later(self.timeout, self.timed_out, call.id)
+        on_timeout = self.loop.call_later(
+            self.timeout, self.timed_out, call.id)
         self.requests[call.id] = on_finished, on_timeout
         self.transport.sendto(pickle.dumps(call))
         return on_finished
@@ -90,10 +94,12 @@ class RpcClientProtocol(asyncio.DatagramProtocol):
             raise AttributeError
         return partial(self.call, name)
 
-    def connection_made(self, transport: DatagramTransport) -> None:
-        self.transport = transport
+    def connection_made(self, transport: BaseTransport) -> None:
+        self.transport = cast(DatagramTransport, transport)
 
-    def datagram_received(self, data: Union[bytes, Text], addr: Tuple[str, int]) -> None:
+    def datagram_received(self, data: Union[bytes, Text],
+                          addr: Tuple[str, int]) -> None:
+        assert isinstance(data, bytes)
         try:
             res: Result = pickle.loads(data)
         except pickle.UnpicklingError:

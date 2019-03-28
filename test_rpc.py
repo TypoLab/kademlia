@@ -1,7 +1,9 @@
-import pytest
 import asyncio
 import random
 from asyncio import AbstractEventLoop
+
+import pytest
+
 from . import rpc
 
 addr = ('127.0.0.1', 7890)

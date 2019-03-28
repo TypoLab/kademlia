@@ -1,13 +1,13 @@
 import argparse
-import sys
 import asyncio
+import sys
+
 import kademlia
 from kademlia import ID, Node
 
-
 ap = argparse.ArgumentParser(description='A demo for using kademlia lib.')
 ap.add_argument('--port', '-p', default=7890, type=int, help='Port to listen.')
-ap.add_argument('--id',  default=0, type=int, help='Node ID.')
+ap.add_argument('--id', default=0, type=int, help='Node ID.')
 ap.add_argument('--bootstrap', '-b', nargs='*', help='Bootstrap peers.')
 args = ap.parse_args()
 
@@ -47,7 +47,9 @@ async def repl():
         if not cmds:
             continue
         if cmds[0] == 'info':
-            print(f'  Server: {dht}\n  Nodes: {dht.routing_table.get_nodes()}\n  Storage: {dht.storage}')
+            print(f'  Server: {dht}\n'
+                  f'  Nodes: {dht.routing_table.get_nodes()}\n'
+                  f'  Storage: {dht.storage}')
         else:
             id = ID(int(cmds[1]))
             if cmds[0] == 'set':
