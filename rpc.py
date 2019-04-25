@@ -12,6 +12,7 @@ from typing import cast
 import msgpack
 
 from .node import Node, Addr
+from .serializer import dumps, loads
 
 A = TypeVar('A')
 R = TypeVar('R')
@@ -22,23 +23,20 @@ class Call(Generic[A]):
     caller: Node
     func: str
     args: A
+    id: int
 
 
 @dataclass
 class Result(Generic[R]):
     ok: bool
     value: R
-
-
-@dataclass
-class Message(Generic[A, R]):
     id: int
-    is_call: bool
-    data: Union[Call[A], Result[R]]
 
 
 log = logging.getLogger(__name__)
 RpcCallback = Optional[Callable[[Call], None]]
+CALL_MSG = b'\x01'
+RESULT_MSG = b'\x02'
 
 
 class RpcProtocol(asyncio.DatagramProtocol):
@@ -57,9 +55,8 @@ class RpcProtocol(asyncio.DatagramProtocol):
         self.funcs[func.__name__] = func
         return func
 
-    def call(self, addr: Addr, func: str, *args, **kwargs) -> Future:
-        msg = Message(id=self.req_id, is_call=True,
-                      data=Call(self.caller, func, args, kwargs))
+    def call(self, addr: Addr, func: str, *args) -> Future:
+        msg = Call(self.caller, func, args, self.req_id)
         self.req_id += 1
 
         on_finished = self.loop.create_future()
@@ -67,7 +64,8 @@ class RpcProtocol(asyncio.DatagramProtocol):
             self.timeout, self.timed_out, msg.id)
         self.requests[msg.id] = on_finished, on_timeout
         log.debug(f'Sending RPC request {msg} to {addr}')
-        self.transport.sendto(msg.to_bytes(), addr)
+        # Do make me know if you have a better way :(
+        self.transport.sendto(CALL_MSG + dumps(msg), addr)
         return on_finished
 
     def timed_out(self, msg_id: int) -> None:
@@ -79,8 +77,8 @@ class RpcProtocol(asyncio.DatagramProtocol):
         if func.startswith('_'):
             raise AttributeError
 
-        def f(addr: Addr, *args, **kwargs):
-            return self.call(addr, func, *args, **kwargs)
+        def f(addr: Addr, *args):
+            return self.call(addr, func, *args)
 
         return f
 
@@ -94,7 +92,7 @@ class RpcProtocol(asyncio.DatagramProtocol):
             self.on_rpc(call)
 
         try:
-            res = func(*call.args, **call.kwargs)
+            res = func(*call.args)
         except Exception as exc:
             return Result(False, exc)
         else:
@@ -108,8 +106,13 @@ class RpcProtocol(asyncio.DatagramProtocol):
 
     def datagram_received(self, data: Union[bytes, Text], addr: Addr) -> None:
         assert isinstance(data, bytes)
+        msg_type, data = data[0], data[1:]
+        if msg_type == CALL_MSG:
+            msg = loads(data, Call[Tuple])
+            arg_type = Tuple[tuple(t for t in msg.func.__annotations__)]
+
         try:
-            msg = Message.from_bytes(data)
+            pass
         except msgpack.UnpackException:
             log.warning(f'Received invalid RPC request/response: {data}')
             return
