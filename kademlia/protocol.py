@@ -89,28 +89,27 @@ class Server:
         self.storage: Dict[ID, bytes] = {}
 
     async def start(self, bootstrap: Optional[List[Node]] = None):
-
-        self.rpc = await rpc.start(self.node, on_rpc=self.update_routing_table, timeout=300)
+        self.rpc = await rpc.start(self.node, on_rpc=self.update_routing_table)
         register = self.rpc.register
 
         @register
-        def ping(caller: Node) -> str:
+        def ping() -> str:
             return 'pong'
 
         @register
-        def store(caller: Node, key: ID, value: bytes) -> None:
+        def store(key: ID, value: bytes) -> None:
             self.storage[key] = value
 
         @register
-        async def find_node(caller: Node, id: ID) -> List[Node]:
-            return await self._lookup_node(caller, id, 'find_node')
+        def find_node(id: ID) -> List[Node]:
+            return self.get_closest_nodes(id)
 
         @register
-        async def find_value(caller: Node, id: ID) -> Union[List[Node], bytes]:
+        def find_value(id: ID) -> Union[List[Node], bytes]:
             try:
                 return self.storage[id]
             except KeyError:
-                return await self._lookup_node(caller, id, 'find_value')
+                return find_node(id)
 
         # join the network
         if bootstrap is None:
@@ -163,12 +162,14 @@ class Server:
 
         # the new node is dropped
 
-    async def _lookup_node(self, caller: Node, id: ID, rpc_func: str) -> List[Node]:
+    def get_closest_nodes(self, id: ID) -> List[Node]:
+        return nsmallest(ksize, chain(*self.routing_table), xor_key(id))
+
+    async def _lookup_node(self, id: ID, rpc_func: str) -> List[Node]:
         """Locate the k closest nodes to the given node ID.
         """
         xor = xor_key(id)
-        nodes = filter(lambda n: n != self.node and n.id != caller.id,
-                       chain(*self.routing_table))
+        nodes = self.get_closest_nodes(id)
         queue = LookupQueue(xor, nodes)
         queried = set()
 
@@ -180,6 +181,8 @@ class Server:
                 if isinstance(new_nodes, bytes):
                     raise ValueFound(new_nodes)
                 for node in new_nodes:
+                    if node == self.node:
+                        continue
                     if node.id == id:
                         raise NodeFound(node)
                     if node not in queried:
@@ -193,7 +196,7 @@ class Server:
 
     async def set(self, key: ID, value: bytes) -> None:
         self.storage[key] = value
-        nodes = await self._lookup_node(self.node, key, 'find_node')
+        nodes = await self._lookup_node(key, 'find_node')
         await asyncio.gather(
             *(self.rpc.store(node.addr, key, value) for node in nodes))
 
@@ -202,9 +205,11 @@ class Server:
             return self.storage[key]
         except KeyError:
             try:
-                nodes = await self._lookup_node(self.node, key, 'find_value')
+                await self._lookup_node(key, 'find_value')
             except ValueFound as exc:
                 return exc.args[0]
+            else:
+                raise KeyError(f'key {key} not found')
 
     async def close(self):
         self.rpc.close()

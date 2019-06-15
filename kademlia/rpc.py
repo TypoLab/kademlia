@@ -88,7 +88,6 @@ class Function:
     def __post_init__(self):
         hints = get_type_hints(self.func)
         self.return_type = hints.pop('return', type(None))
-        del hints['caller']
         self.args_type = Tuple[tuple(hints.values())]
 
 
@@ -147,7 +146,7 @@ class RpcProtocol(asyncio.DatagramProtocol):
             await self.on_rpc(call.caller)
 
         try:
-            res = func(call.caller, *call.args)
+            res = func(*call.args)
             if asyncio.iscoroutinefunction(func):
                 res = await res
         except Exception as exc:

@@ -22,7 +22,7 @@ async def rpc():
 @pytest.mark.asyncio
 async def test_simple_call(rpc):
     @rpc.register
-    def echo(caller: Node, a: int) -> int:
+    def echo(a: int) -> int:
         return a
 
     for i in range(10):
@@ -32,7 +32,7 @@ async def test_simple_call(rpc):
 @pytest.mark.asyncio
 async def test_async_rpc_func(rpc):
     @rpc.register
-    async def async_echo(caller: Node, a: int) -> int:
+    async def async_echo(a: int) -> int:
         return a
 
     for i in range(10):
@@ -65,7 +65,7 @@ async def test_exceptions(rpc):
 @pytest.mark.asyncio
 async def test_timeout(rpc):
     @rpc.register
-    def f(caller: Node):
+    def f():
         pass
 
     with pytest.raises(asyncio.TimeoutError):
@@ -75,7 +75,7 @@ async def test_timeout(rpc):
 @pytest.mark.asyncio
 async def test_concurrent_calls(rpc):
     @rpc.register
-    def echo(caller: Node, a: int) -> int:
+    def echo(a: int) -> int:
         return a
 
     inputs = list(range(32))
@@ -92,7 +92,7 @@ async def test_on_rpc_callback():
     rpc = await start(node, on_rpc, .5)
 
     @rpc.register
-    def f(caller: Node):
+    def f():
         pass
 
     try:
