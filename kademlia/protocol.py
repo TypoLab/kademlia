@@ -10,7 +10,6 @@ from typing import List, Union, Optional, Tuple, Iterator, Callable, Dict
 from . import rpc
 from .config import asize, ksize
 from .node import ID, Node, Addr
-from .utils import xor_key
 
 log = logging.getLogger(__name__)
 
@@ -53,16 +52,16 @@ class LookupQueue(asyncio.Queue):
         pass
 
     def _put(self, node: Node):
-        lo, hi = 0, len(self.queue)
+        lo, hi = 0, len(self._queue)
         distance = self._xor(node)
         while lo < hi:
             mid = (lo + hi) // 2
-            if distance > self._xor(self.queue[mid]):
+            if distance > self._xor(self._queue[mid]):
                 hi = mid
             else:
                 lo = mid + 1
         self._queue.insert(lo, node)
-        self._queue = self.queue[-ksize:]
+        self._queue = self._queue[-ksize:]
 
     def _get(self):
         return self._queue.pop()
@@ -74,6 +73,10 @@ class ValueFound(Exception):
 
 class NodeFound(Exception):
     pass
+
+
+def xor_key(id: ID) -> Callable[[Node], int]:
+    return lambda n: n.id ^ id
 
 
 class Server:
