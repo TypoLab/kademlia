@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Dict, FrozenSet, Tuple, TypeVar, Generic
+from typing import List, Dict, FrozenSet, Tuple, TypeVar, Generic, Union, Any
 
-from .serializer import dumps, loads
+from kademlia.serializer import dumps, loads
 
 
 @dataclass
@@ -81,11 +81,11 @@ def test_unsubscripted_generic():
     a = Msg(is_int=True, value=123)
     b = Msg(is_int=False, value='hi')
 
-    def infer_type_var(type_var: TypeVar, is_int: bool):
-        return int if is_int else str
+    def infer_generic(is_int: bool):
+        return {A: int if is_int else str}
 
-    a1 = loads(Msg, dumps(a), infer_type_var)
-    b1 = loads(Msg, dumps(b), infer_type_var)
+    a1 = loads(Msg, dumps(a), infer_generic)
+    b1 = loads(Msg, dumps(b), infer_generic)
 
     assert type(a1) is Msg
     assert type(a1.value) is int
@@ -93,3 +93,45 @@ def test_unsubscripted_generic():
     assert type(b1.value) is str
     assert a1 == a
     assert b1 == b
+
+
+def test_union():
+    @dataclass
+    class Server:
+        is_str: bool
+        addr: Union[Address, str]
+
+    a = Server(False, Address('127.0.0.1', 22))
+    b = Server(True, '127.0.0.1:22')
+
+    def infer_union(is_str: bool):
+        return {'addr': str if is_str else Address}
+
+    a1 = loads(Server, dumps(a), infer_union=infer_union)
+    b1 = loads(Server, dumps(b), infer_union=infer_union)
+
+    assert type(a1) is Server
+    assert type(b1) is Server
+    assert type(a1.addr) is Address
+    assert type(b1.addr) is str
+    assert a1 == a
+    assert b1 == b
+
+
+def test_union_guessing():
+    tp = Union[bytes, List[int]]
+    a = b'a'
+    b = [1, 2]
+
+    assert loads(tp, dumps(a)) == a
+    assert loads(tp, dumps(b)) == b
+
+    @dataclass
+    class Ip:
+        val: Union[Tuple[int, int, int, int], str]
+
+    local = Ip((127, 0, 0, 1))
+    dns = Ip('8.8.8.8')
+
+    assert loads(Ip, dumps(local)) == local
+    assert loads(Ip, dumps(dns)) == dns

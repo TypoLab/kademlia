@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Union, Tuple
 
 
@@ -23,7 +23,7 @@ class ID(int):
 Addr = Tuple[str, int]
 
 
-@dataclass
+@dataclass(eq=True, frozen=True)
 class Node:
     id: ID
-    addr: Addr
+    addr: Addr = field(compare=False)
